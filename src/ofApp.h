@@ -48,7 +48,7 @@ private:
     int  ballColor(void);
     void clear(void);
     void drawHelpFbo(void);
-    void drawMenuFbo(void);
+    void drawMenuFbo(int menu);
     void drawScene(const ofRectangle& viewp);
     void drawWalls(const ofRectangle& viewp);
     void setStereoView(void);
@@ -59,16 +59,16 @@ private:
     typedef BallVector::iterator BallIterator;
     BallVector balls;
     int ballSize;
-    
-    Ball::GravityType gravityType;
 
 private:
     float centerX;
     float centerY;
     float rotation;
 
+    bool isMouse_;    // use mouse until leap comes online
     bool isLaunching_;
     int launchTime_;
+    float gravityFactor_;
     
     ofPoint mousePoint;  // not using right now
     
@@ -95,6 +95,6 @@ private:
 
     AutoMapper mapper_;
     Leap::Controller leap_;
-    bool haveMenuKey_;
-    int firstKey_;
+    // For multi-level menus
+    int firstMenuKey_;
 };

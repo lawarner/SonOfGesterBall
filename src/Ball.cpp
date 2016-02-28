@@ -5,8 +5,6 @@
 
 #include "Ball.h"
 
-#define G 26000		// gravity in pixels / second^2
-
 extern ofPoint fingerAt;
 extern int fingerCount;
 extern ofVec3f fingerPoints[];
@@ -14,15 +12,13 @@ extern ofVec3f fingerSpeeds[];
 
 
 
-Ball::Ball(const ofPoint& _pos, const ofPoint& _speed, int _color, int _radius,
-           GravityType _gravityType)
+Ball::Ball(const ofPoint& _pos, const ofPoint& _speed, int _color, int _radius)
 : position(_pos)
 , speed(_speed)
 , direction(_speed)
 , color(_color)
 , radius(_radius)
 , stuckToFinger(0)
-, gravityType(_gravityType)
 {
     direction.normalize();
     mass = radius * radius;	// circle
@@ -101,12 +97,6 @@ void Ball::maintainMinimumDistance(ofPoint& other, float otherRadius, float dist
 }
 
 
-void Ball::setGravityType(GravityType _gravityType)
-{
-    gravityType = _gravityType;
-}
-
-
 void Ball::draw(void)
 {
     ofPoint pos2z = position * ofPoint(1,1,2);	// because of scale 0.5
@@ -117,7 +107,7 @@ void Ball::draw(void)
     
     // drop shadow
     ofPushMatrix();
-    ofTranslate(pos2z.x, ofGetWindowHeight() - 0.005, pos2z.z);
+    ofTranslate(pos2z.x, ofGetWindowHeight() - 0.01, pos2z.z);
     ofRotateX(90);
     ofFill();
     ofSetColor(0, 0, 0, 60);
@@ -167,35 +157,41 @@ void Ball::update(void)
     // g' = (re^2 / r^2) g  outside
     float dist;
     float gravPull; // = mass * G * pow(interval, 2);
-    if (gravityType == gravityGround)
+    const float G = Physics::gravity;
+
+    switch (Physics::gravityType)
     {
-        dist = ofGetWindowHeight() - position.y;
-        if (dist < radius)
+        case Physics::gravityGround:
+            dist = ofGetWindowHeight() - position.y;
+            if (dist < radius)
+            {
+                cout << "Below ground " << dist << " of R=" << radius << endl;
+                gravPull = interval * (4.0 / 3.0) * G * dist;	// normally multiply by PI
+            }
+            else
+                gravPull = interval * G * mass * 0.8 / pow(dist * 0.6, 2);
+            if (gravPull > 33)	// dampen a bit
+            {
+                //            cout << "Big gravPull = " << gravPull << endl;
+                gravPull = 33;
+            }
+            speed.y += gravPull;
+            break;
+        case Physics::gravityCenter:
         {
-            cout << "Below ground " << dist << " of R=" << radius << endl;
-            gravPull = interval * (4.0 / 3.0) * G * dist;	// normally multiply by PI
+            int centerX = ofGetViewportWidth() / 2;		// was ofGetWindowWidth()
+            int centerY = ofGetWindowHeight() / 2;
+            calcGravity(centerX, centerY, centerX, interval, G);
+            break;
         }
-        else
-            gravPull = interval * G * mass * 0.8 / pow(dist * 0.6, 2);
-        if (gravPull > 30)	// dampen a bit
-        {
-            //            cout << "Big gravPull = " << gravPull << endl;
-            gravPull = 30;
-        }
-        speed.y += gravPull;
-    }
-    else if (gravityType == gravityCenter)
-    {
-        int centerX = ofGetViewportWidth() / 2;		// was ofGetWindowWidth()
-        int centerY = ofGetWindowHeight() / 2;
-        calcGravity(centerX, centerY, 0, interval, G / 10);
-    }
-    else if (gravityType == gravityFingers)		// fingers have gravity unless there is none
-    {
-        for (int idx = 0; idx < fingerCount; ++idx)
-        {
-            calcGravity(fingerPoints[idx].x, fingerPoints[idx].y, fingerPoints[idx].z, interval, G * 8);
-        }
+        case Physics::gravityFingers:
+            for (int idx = 0; idx < fingerCount; ++idx)
+            {
+                calcGravity(fingerPoints[idx].x, fingerPoints[idx].y, fingerPoints[idx].z, interval, G * 8);
+            }
+            break;
+        default:
+            break;
     }
     
     if (stuckToFinger)
@@ -214,7 +210,11 @@ void Ball::calcGravity(int mx, int my, int mz, float interval, float g)
 #if 1
     // Note the 0.5 below is to increase the range (distance) of gravitational pull
     if (dist < radius)
-        gravPull = 0;  //interval * g * mass * (radius - dist) * 0.8 / (radius * 10);
+    {
+        //gravPull = interval * g * mass * (radius - dist) * 0.8 / (radius * 10);
+        gravPull = 0.0001;
+        speed *= 0.91;
+    }
     else
         gravPull = interval * g * mass * 0.5 / pow(dist, 2);
     gravPull = CLAMP(gravPull, 0, 48);

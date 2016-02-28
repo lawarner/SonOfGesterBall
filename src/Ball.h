@@ -6,6 +6,8 @@
 
 #include <ofMain.h>
 
+#include "physics.h"
+
 
 // create params:
 // initial position, initial speed, color, radius (and thus weight)
@@ -13,18 +15,9 @@
 class Ball
 {
 public:
-    enum GravityType
-    {
-        gravityNone = 0,
-        gravityGround,
-        gravityCenter,
-        gravityFingers,
-        gravityTypeCount
-    };
-    friend ostream& operator<<(ostream& os, GravityType gt);
+    friend ostream& operator<<(ostream& os, Physics::GravityType gt);
     
-    Ball(const ofPoint& _pos, const ofPoint& _speed, int _color, int _radius,
-         GravityType _gravityType = gravityGround);
+    Ball(const ofPoint& _pos, const ofPoint& _speed, int _color, int _radius);
     
     int ballColor(void) const { return color; }
     int ballRadius(void) const { return radius; }
@@ -32,7 +25,6 @@ public:
     bool collide(const ofPoint& other, float otherRadius);
     void maintainMinimumDistance(ofPoint& other, float otherRadius, float dist);
     void stickToFinger(int _fingerId) { stuckToFinger = _fingerId; }
-    void setGravityType(GravityType _gravityType);
     void setViewport(const ofRectangle& viewp) { viewPort = viewp; }
     void draw(void);
     void update(void);
@@ -50,8 +42,6 @@ private:
     int radius;
     int stuckToFinger;
     
-    GravityType gravityType;
-    
     float mass;
     int  lastUpdateTime;
     ofRectangle viewPort;
@@ -60,22 +50,22 @@ private:
 };
 
 
-inline ostream& operator<<(ostream& os, Ball::GravityType gt)
+inline ostream& operator<<(ostream& os, Physics::GravityType gt)
 {
     string gtstr;
     
     switch (gt)
     {
-        case Ball::gravityNone:
+        case Physics::gravityNone:
             gtstr = "None";
             break;
-        case Ball::gravityGround:
+        case Physics::gravityGround:
             gtstr = "Ground";
             break;
-        case Ball::gravityCenter:
+        case Physics::gravityCenter:
             gtstr = "Center";
             break;
-        case Ball::gravityFingers:
+        case Physics::gravityFingers:
             gtstr = "Finger";
             break;
         default:

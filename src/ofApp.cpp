@@ -2,39 +2,56 @@
 #include "ofApp.h"
 #include "ofxTweenzor.h"
 
+#include "physics.h"
+
+
 // Some globals for now
 ofVec3f fingerAt;
 int fingerCount;
 ofVec3f fingerPoints[MAX_FINGERS];
 ofVec3f fingerSpeeds[MAX_FINGERS];
 
-float mouseZ;
-
 float helpAlpha;
+float menuAngle;
 
 static const char* helpString =
 "<sp> Clear all balls     l  Launch ball\n"
 " d   Deserialize         p  Playback recorded points\n"
-" f   Toggle fullscreen   r  Stop/start recording\n"
-" g   Change gravity    -,+  Change z depth of mouse\n"
+" f   Toggle fullscreen   m  Mapper commands\n"
+" g   Change gravity      r  Stop/start recording\n"
+"                       -,+  Change z depth of mouse\n"
 " h,? Help              0-9  Set ball size\n";
 
+static const char* gravityMenuString =
+" GRAVITY OPTIONS:\n"
+"  c   Center\n"
+"  f   Fingers\n"
+"  g   Ground\n"
+"  n   None\n"
+" +/-  Change gravity 10%\n"
+" 0-9  Set gravity magnitude";
+
 static const char* mapMenuString =
-" f  Freeze map\n"
-" p  Print map\n"
-" r  Reset (and thaw) map\n"
-" t  Thaw map (unfreeze)";
+" MAPPER COMMANDS:\n"
+"  f  Freeze map\n"
+"  p  Print map\n"
+"  r  Reset (and thaw) map\n"
+"  t  Thaw map (unfreeze)";
 
 
 ofApp::ofApp()
-: launchTime_(0)
+: isMouse_(true)
+, launchTime_(0)
+, gravityFactor_(4)
 , mapper_(ofPoint(ofGetWindowWidth(), ofGetWindowHeight(), ofGetWindowHeight()), ofPoint(0,0,0))
-, haveMenuKey_(false)
-, firstKey_(0)
+, firstMenuKey_(0)
 {
     fingerCount = 0;
-    mapper_.set(ofPoint(-200, 10, -128), ofPoint(68, 250, 190));
+    //mapper_.set(ofPoint(-200, 10, -128), ofPoint(68, 250, 190));
     // World: -244.206, 0, -128.671 to 67.7722, 258.394, 152.245
+    // fullscreen, after
+    //World: -185.543, 0, -140.934 to 165.885, 447.236, 176.862
+    mapper_.set(ofPoint(-180, 0, -140), ofPoint(165, 430, 170));
 }
 
 ofApp::~ofApp()
@@ -89,16 +106,13 @@ void ofApp::setup()
     parallax = 0;
     ballSize = 50;
     
-    gravityType = Ball::gravityGround;
-    
     font.load("courbd.ttf", 22);
     
     setupViewports();
     
     mousePoint.z = centerY;
-    mouseZ = centerY;
     
-    camDistance = ofGetWindowHeight() / 2.7;	// 360;
+    camDistance = ofGetWindowHeight() / 2.3;	// 360;
     cam.setDistance(camDistance);
     //	cam.setTarget(ofPoint(centerX, centerY, ofGetWindowHeight()));
     ///	cam.cacheMatrices();
@@ -141,6 +155,7 @@ void ofApp::setup()
     light.setSpecularColor( ofFloatColor(0.7f, 0.7f, 0.7f));
     
     helpAlpha = 0;
+    menuAngle = 0;
     helpFbo.allocate(ofGetWindowWidth(), ofGetWindowHeight(), GL_RGBA);
     menuFbo.allocate(ofGetWindowWidth() / 2, ofGetWindowHeight() / 2, GL_RGBA);
 
@@ -189,18 +204,32 @@ void ofApp::drawHelpFbo()
     ofPopMatrix();
 }
 
-//--------------------------------------------------------------
-void ofApp::drawMenuFbo()
+void ofApp::drawMenuFbo(int menu)
 {
     ofPushMatrix();
     menuFbo.begin();
 
     glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT + 0);
-    ofClear(3, 3, 190, 102);
+    ofClear(255, 255, 255, 0);
     ofRotateX(180);
     ofTranslate(0, -centerY, 0);
-    ofSetColor(129, 255, 22, 240);
-    font.drawString(mapMenuString, 20, font.getLineHeight() * 2 + 8);
+//    ofRotateY(menuAngle);
+    ofSetColor(3, 3, 190, 120);
+    ofDrawRectangle(0, 0, centerX, centerY);
+    ofTranslate(0, 0, -1);
+    ofSetColor(29, 255, 29, 255);
+
+    float ypos = font.getLineHeight() * 2 + 8;
+    const char* strMenu = mapMenuString;
+    if (menu == 'g')
+    {
+        char currG[64];
+        snprintf(currG, sizeof(currG), "  G = %d", (int) Physics::gravity);
+        font.drawString(currG, 20, ypos - 8);
+        ypos += font.getLineHeight() + 8;
+        strMenu = gravityMenuString;
+    }
+    font.drawString(strMenu, 20, ypos);
     
     menuFbo.end();
     ofPopMatrix();
@@ -208,7 +237,7 @@ void ofApp::drawMenuFbo()
 
 void ofApp::updateFinger(ofVec3f& finger)
 {
-    finger.set(ofBaseApp::mouseX, ofBaseApp::mouseY, mouseZ);
+    finger.set(ofBaseApp::mouseX, ofBaseApp::mouseY, mousePoint.z);
 }
 
 //--------------------------------------------------------------
@@ -217,6 +246,12 @@ void ofApp::update()
     int currMillis = ofGetElapsedTimeMillis();
     
     //updateFinger(fingerPoint);
+    if (isMouse_)
+    {
+        fingerCount = 1;
+        updateFinger(fingerPoints[0]);
+    }
+
     Tweenzor::update(currMillis);
     
     for (int idx = 0; idx < fingerCount; ++idx)
@@ -225,18 +260,19 @@ void ofApp::update()
         
         if (isLaunching_)
         {
-            if (currMillis - launchTime_ > 160)
+            if (currMillis - launchTime_ > 112)
             {
-                ofPoint speed = fingerSpeeds[idx] * 1.9;
+                ofPoint speed = fingerSpeeds[idx] * 2.2;
                 float speedLen = speed.length();
-                cout << " - speed is (" << speedLen << ") mm / second" << endl;
-                
-                if (speedLen > 1800)
+                //cout << " - speed is (" << speedLen << ") mm / second" << endl;
+
+                float thresholdSpeed = isMouse_ ? 100 : 200;
+                if (speedLen > thresholdSpeed)
                 {
                     //isLaunching_ = false;
                     launchTime_ = currMillis;
                     fingerSpeeds[idx].set(0, 0, 0);
-                    Ball* ball = new Ball(fingerAt, speed, ballColor(), ballSize, gravityType);
+                    Ball* ball = new Ball(fingerAt, speed, ballColor(), ballSize);
                     ball->setViewport(ofGetCurrentViewport());
                     balls.push_back(ball);
                 }
@@ -246,13 +282,11 @@ void ofApp::update()
     
     if (helpAlpha > 0)
     {
-        ofEnableAlphaBlending();
         drawHelpFbo();
     }
-    if (haveMenuKey_)
+    if (firstMenuKey_)
     {
-        ofEnableAlphaBlending();
-        drawMenuFbo();
+        drawMenuFbo(firstMenuKey_);
     }
     
     for (BallIterator it = balls.begin(); it != balls.end(); it++)
@@ -331,6 +365,11 @@ void ofApp::drawScene(const ofRectangle& viewp)
     }
     
     ofPushMatrix();
+
+    if (helpAlpha > 0 || firstMenuKey_)
+    {
+        ofEnableAlphaBlending();
+    }
     
     int centerViewX = viewp.width / 2;
     ofTranslate(-centerViewX, -centerY, -camDistance);
@@ -344,8 +383,8 @@ void ofApp::drawScene(const ofRectangle& viewp)
     //    ofSetColor(light.getDiffuseColor());	// draw the light
     //    ofSphere(light.getPosition(), 18.f);
     //	ofSphere(ofPoint(centerX, centerY, viewp.height), 18.f);
-    light.setPosition(0, -10, -10);
-    light.lookAt(ofPoint(viewp.width, viewp.height, viewp.height));
+    //light.setPosition(centerX, viewp.height * 1.2, centerX);
+    //light.lookAt(ofPoint(viewp.width, viewp.height, viewp.height));
     
 #if 0
     light.setGlobalPosition(centerViewX, -40, centerY + 100);
@@ -385,11 +424,13 @@ void ofApp::drawScene(const ofRectangle& viewp)
         helpFbo.draw(0, 0);
         ofPopMatrix();
     }
-    if (haveMenuKey_)
+    if (firstMenuKey_)
     {
         ofPushMatrix();
         ofTranslate(0, 0, centerY * 2 / 3);
-        ofSetHexColor(0xeeeeff);
+        ofRotate(menuAngle, 1, 1, 1);
+//        ofRotateY(menuAngle);
+        //ofSetHexColor(0xefefff);
         menuFbo.draw(centerX / 2, centerY / 2);
         ofPopMatrix();
     }
@@ -398,6 +439,8 @@ void ofApp::drawScene(const ofRectangle& viewp)
     // the position of the light must be updated every frame,
     // call enable() so that it can update itself //
     light.enable();
+    light.setPosition(viewp.height * 1.2, centerX, centerX);
+    light.setGlobalPosition(centerX, viewp.height * 1.2, centerX);
     
     ofFill();
     ofPushMatrix();
@@ -487,31 +530,8 @@ void ofApp::keyPressed(int key)
 void ofApp::keyReleased(int key0)
 {
     int key = tolower(key0);
-    if (haveMenuKey_)
-    {
-        switch (key)    // assume first key 'm'
-        {
-            case 'f':
-                mapper_.freeze();
-                break;
-            case 'm':
-                haveMenuKey_ = false;
-                break;
-            case 'p':
-                mapper_.printMap();
-                break;
-            case 'r':
-                mapper_.reset();
-                break;
-            case 't':
-                mapper_.freeze(false);
-                break;
-        }
-        haveMenuKey_ = false;
-    }
-    else
-    {
-    switch (key)
+
+    switch (firstMenuKey_ ? firstMenuKey_ : key)
     {
         case ' ':
             clear();
@@ -524,12 +544,46 @@ void ofApp::keyReleased(int key0)
             mapper_.setModel(ofPoint(ofGetWindowWidth(), ofGetWindowHeight(), ofGetWindowHeight()), ofPoint(0,0,0));
             break;
         case 'g':
-            gravityType = (Ball::GravityType) ((int) gravityType + 1);
-            if (gravityType >= Ball::gravityTypeCount)
-                gravityType = Ball::gravityNone;
-            for (BallIterator it = balls.begin(); it != balls.end(); it++)
-                (*it)->setGravityType(gravityType);
-            ofLogNotice() << "Gravity is " << gravityType << endl;
+            if (firstMenuKey_)
+            {
+                firstMenuKey_ = 0;
+                Physics::GravityType lastGravityType = Physics::gravityType;
+                switch (key)
+                {
+                    case 'c': // Center
+                        Physics::gravityType = Physics::gravityCenter;
+                        break;
+                    case 'f': // Fingers
+                        Physics::gravityType = Physics::gravityFingers;
+                        break;
+                    case 'g': // Ground
+                        Physics::gravityType = Physics::gravityGround;
+                        break;
+                    case 'n': // None
+                        Physics::gravityType = Physics::gravityNone;
+                        break;
+                    case '+':
+                    case '-':
+                    {
+                        Physics::gravity += (key == '+' ? 1 : -1) * Physics::gravity * 0.1;
+                    }
+                        break;
+                    default:
+                        if (key >= '0' && key <= '9')
+                        {
+                            gravityFactor_ = key - '0';
+                            float gf = pow(10, gravityFactor_);
+                            Physics::gravity = 2.6 * gf;
+                        }
+                        break;
+                }
+            }
+            else
+            {
+                firstMenuKey_ = key;
+                Tweenzor::removeTween(&menuAngle);
+                Tweenzor::add(&menuAngle, 180, 0, 0, 1, EASE_OUT_CUBIC);
+            }
             break;
         case 'h':
         case '?':
@@ -551,17 +605,39 @@ void ofApp::keyReleased(int key0)
                 ;
             break;
         case 'l':
+            if (isLaunching_ && isMouse_) {
+                Ball* ball = new Ball(fingerAt, ofPoint(), ballColor(), ballSize);
+                ball->setViewport(ofGetCurrentViewport());
+                balls.push_back(ball);
+            }
             isLaunching_ = !isLaunching_;
             break;
         case 'm':  // automapper commands
-            if (haveMenuKey_)
+            if (firstMenuKey_)
             {
-                haveMenuKey_ = false;
+                switch (key)
+                {
+                    case 'f':
+                        mapper_.freeze();
+                        break;
+                    case 'p':
+                        mapper_.printMap();
+                        ofLogVerbose() << "Window: " << ofGetWindowSize() << std::endl;
+                        break;
+                    case 'r':
+                        mapper_.reset();
+                        break;
+                    case 't':
+                        mapper_.freeze(false);
+                        break;
+                }
+                firstMenuKey_ = 0;
             }
             else
             {
-                haveMenuKey_ = true;
-                firstKey_ = key;
+                firstMenuKey_ = key;
+                Tweenzor::removeTween(&menuAngle);
+                Tweenzor::add(&menuAngle, 180, 0, 0, 2, EASE_OUT_CUBIC);
             }
             break;
         case 'p':
@@ -581,26 +657,26 @@ void ofApp::keyReleased(int key0)
             break;
         case '-':
         case '_':
-            mouseZ -= 10;
-            ofLogVerbose() << "Mouse depth " << mouseZ << endl;
+            mousePoint.z -= 10;
+            ofLogVerbose() << "Mouse depth " << mousePoint.z << endl;
             break;
         case '+':
         case '=':
-            mouseZ += 10;
-            ofLogVerbose() << "Mouse depth " << mouseZ << endl;
+            mousePoint.z += 10;
+            ofLogVerbose() << "Mouse depth " << mousePoint.z << endl;
             break;
         default:
             if (key >= '0' && key <= '9')
                 ballSize = (key - '0' + 1) * 7;
             break;
     }
-    }
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseMoved(int x, int y )
 {
-    mousePoint.set(x, y);
+    mousePoint.x = x;
+    mousePoint.y = y;
 }
 
 //--------------------------------------------------------------
@@ -613,13 +689,15 @@ void ofApp::mouseDragged(int x, int y, int button)
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button)
 {
-    mousePoint.z = 99;
+    //mousePoint.z = 99;
+    fingerSpeeds[0].set(2, 97, 6);
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseReleased(int x, int y, int button)
 {
-    mousePoint.z = -50;
+    //mousePoint.z = -50;
+    fingerSpeeds[0].set(0, 0, 0);
 }
 
 //--------------------------------------------------------------
@@ -642,17 +720,18 @@ void ofApp::dragEvent(ofDragInfo dragInfo)
 }
 
 //--------------------------------------------------------------
-//   LEAP LISTENER
+//   LISTENER FOR LEAP MOTION
 //--------------------------------------------------------------
 
 void ofApp::onInit(const Leap::Controller& ctrl)
 {
-    std::cout << "Leap toolkit initialized" << std::endl;
+    std::cout << "Leap Motion toolkit initialized" << std::endl;
 }
 
 void ofApp::onConnect(const Leap::Controller& ctrl)
 {
-    
+    ofLogVerbose() << "Switching to non-mouse" << std::endl;
+    isMouse_ = false;
 }
 
 void ofApp::onDisconnect(const Leap::Controller& ctrl)
@@ -677,8 +756,9 @@ void ofApp::onFrame(const Leap::Controller& ctrl)
     }
     for (int idx = 0; idx < fingerCount; ++idx)
     {
+        const float FACTOR = 0.09;  // speed control
         const Leap::Finger finger = frame.fingers().extended()[idx];
-        const Leap::Vector fingerSpeed = finger.tipVelocity();
+        const Leap::Vector fingerSpeed = finger.tipVelocity() * FACTOR;
 
         //TODO kick outliers
         mapper_.worldToModel(finger.tipPosition(), fingerPoints[idx]);
