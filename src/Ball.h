@@ -52,27 +52,23 @@ private:
 
 inline ostream& operator<<(ostream& os, Physics::GravityType gt)
 {
-    string gtstr;
-    
     switch (gt)
     {
         case Physics::gravityNone:
-            gtstr = "None";
+            os << "None";
             break;
         case Physics::gravityGround:
-            gtstr = "Ground";
+            os << "Ground";
             break;
         case Physics::gravityCenter:
-            gtstr = "Center";
+            os << "Center";
             break;
         case Physics::gravityFingers:
-            gtstr = "Finger";
+            os << "Finger";
             break;
         default:
-            gtstr = "unknown="; // + gt;
+            os << "unknown=" << gt;
             break;
     }
-    
-    os << gtstr;
     return os;
 }

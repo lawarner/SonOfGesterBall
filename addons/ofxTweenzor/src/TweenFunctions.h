@@ -94,7 +94,7 @@ public:
 		return a_c * sin(a_t/a_d * HALF_PI) + a_b;
 	}
 	static float easeInOutSine(float a_t, float a_b, float a_c, float a_d) {
-		return a_c/2 * (1.f - cos(PI * a_t/a_d)) + a_b;
+    return a_c/2 * (1.f - cos(M_PI * a_t/a_d)) + a_b;
 	}
 	
 	
@@ -149,9 +149,9 @@ public:
 			a_a = a_c;
 			a_s = a_p/4;
 		} else {
-			a_s = a_p/(2*PI) * asin (a_c/a_a);
+			a_s = a_p/(2*M_PI) * asin (a_c/a_a);
 		}
-		return -(a_a*pow(2,10*(a_t-=1)) * sin( (a_t*a_d-a_s)*(2*PI)/a_p )) + a_b;
+		return -(a_a*pow(2,10*(a_t-=1)) * sin( (a_t*a_d-a_s)*(2*M_PI)/a_p )) + a_b;
 	}
 	static float easeOutElastic(float a_t, float a_b, float a_c, float a_d, float a_p = 0, float a_a = 0) {
 		if (a_t==0) return a_b;
@@ -165,9 +165,9 @@ public:
 			a_a = a_c;
 			a_s = a_p/4;
 		} else {
-			a_s = a_p/(2*PI) * asin (a_c/a_a);
+			a_s = a_p/(2*M_PI) * asin (a_c/a_a);
 		}
-		return (a_a*pow(2,-10*a_t) *sin( (a_t*a_d-a_s)*(2*PI)/a_p ) + a_c + a_b);
+		return (a_a*pow(2,-10*a_t) *sin( (a_t*a_d-a_s)*(2*M_PI)/a_p ) + a_c + a_b);
 	}
 	static float easeInOutElastic(float a_t, float a_b, float a_c, float a_d, float a_p = 0, float a_a = 0) {
 		if (a_t==0) return a_b;
@@ -181,10 +181,10 @@ public:
 			a_a = a_c;
 			a_s = a_p/4;
 		} else {
-			a_s = a_p/(2*PI) * asin (a_c/a_a);
+			a_s = a_p/(2*M_PI) * asin (a_c/a_a);
 		}
-		if (a_t < 1) return -.5*(a_a*pow(2,10*(a_t-=1)) * sin( (a_t*a_d-a_s)*(2*PI)/a_p )) + a_b;
-		return a_a*pow(2,-10*(a_t-=1)) * sin( (a_t*a_d-a_s)*(2*PI)/a_p )*.5 + a_c + a_b;
+		if (a_t < 1) return -.5*(a_a*pow(2,10*(a_t-=1)) * sin( (a_t*a_d-a_s)*(2*M_PI)/a_p )) + a_b;
+		return a_a*pow(2,-10*(a_t-=1)) * sin( (a_t*a_d-a_s)*(2*M_PI)/a_p )*.5 + a_c + a_b;
 	}
 	static float easeOutInElastic(float a_t, float a_b, float a_c, float a_d, float a_p = 0, float a_a = 0) {
 		if (a_t < a_d/2) return easeOutElastic (a_t*2, a_b, a_c/2, a_d, a_p, a_a);
